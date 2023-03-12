@@ -1,90 +1,104 @@
 import requests
-import json
 import random
-import numpy
+import matplotlib.pyplot as plt
+import pandas as pd
+import pathlib
 
-key = "o0COF8F9ueC9CQgGV43BRikJ8feKdM7KF4II3aW1ZtMwgqxua8V41w1Qs41HfNUX"
+data_csv = "fma-cal.csv"
 
-fma_district_comps = requests.get(
-    "https://www.thebluealliance.com/api/v3/district/2023fma/events/keys",
-    headers={"X-TBA-Auth-Key": key},
-).json()
+# Sample the data if we haven't already
+if not pathlib.Path(data_csv).exists():
+    # Seed the pseudo-random number generator for repeatability
+    random.seed(0)
 
-print("Has Districts")
+    key = "o0COF8F9ueC9CQgGV43BRikJ8feKdM7KF4II3aW1ZtMwgqxua8V41w1Qs41HfNUX"
 
-all_matches_fma = []
-
-for comp in fma_district_comps:
-    all_matches_fma += requests.get(
-        f"https://www.thebluealliance.com/api/v3/event/{comp}/matches/keys",
+    fma_district_comps = requests.get(
+        "https://www.thebluealliance.com/api/v3/district/2023fma/events/keys",
         headers={"X-TBA-Auth-Key": key},
     ).json()
 
-print("Has District Matches")
+    print("Has Districts")
 
-california_comps = list(
-    filter(
-        lambda comp: comp["state_prov"] == "CA",
-        requests.get(
-            "https://www.thebluealliance.com/api/v3/events/2023/simple",
+    all_matches_fma = []
+
+    for comp in fma_district_comps:
+        all_matches_fma += requests.get(
+            f"https://www.thebluealliance.com/api/v3/event/{comp}/matches/keys",
             headers={"X-TBA-Auth-Key": key},
-        ).json(),
+        ).json()
+
+    print("Has District Matches")
+
+    california_comps = list(
+        filter(
+            lambda comp: comp["state_prov"] == "CA",
+            requests.get(
+                "https://www.thebluealliance.com/api/v3/events/2023/simple",
+                headers={"X-TBA-Auth-Key": key},
+            ).json(),
+        )
     )
-)
 
-print("Has California Comps")
+    print("Has California Comps")
 
-all_matches_cal = []
+    all_matches_cal = []
 
-for comp in california_comps:
-    all_matches_cal += requests.get(
-        f"https://www.thebluealliance.com/api/v3/event/{comp['key']}/matches/keys",
-        headers={"X-TBA-Auth-Key": key},
-    ).json()
+    for comp in california_comps:
+        all_matches_cal += requests.get(
+            f"https://www.thebluealliance.com/api/v3/event/{comp['key']}/matches/keys",
+            headers={"X-TBA-Auth-Key": key},
+        ).json()
 
-print("Has California Matches")
+    print("Has California Matches")
 
-california_samples = []
+    california_samples = []
 
-n = 150
+    n = 150
 
-while len(california_samples) < n:
-    chosen_match = random.choice(all_matches_cal)
-    data = requests.get(
-        f"https://www.thebluealliance.com/api/v3/match/{chosen_match}/simple",
-        headers={"X-TBA-Auth-Key": key},
-    ).json()
-    if data["actual_time"] == None:
-        continue
-    california_samples.append(
-        max(data["alliances"]["blue"]["score"], data["alliances"]["red"]["score"])
-    )
-    print(f"Cal {len(california_samples)}")
+    while len(california_samples) < n:
+        chosen_match = random.choice(all_matches_cal)
+        data = requests.get(
+            f"https://www.thebluealliance.com/api/v3/match/{chosen_match}/simple",
+            headers={"X-TBA-Auth-Key": key},
+        ).json()
+        if data["actual_time"] == None:
+            continue
+        california_samples.append(
+            max(data["alliances"]["blue"]["score"], data["alliances"]["red"]["score"])
+        )
+        print(f"Cal {len(california_samples)}")
 
-fma_samples = []
+    fma_samples = []
 
-while len(fma_samples) < n:
-    chosen_match = random.choice(all_matches_fma)
-    data = requests.get(
-        f"https://www.thebluealliance.com/api/v3/match/{chosen_match}/simple",
-        headers={"X-TBA-Auth-Key": key},
-    ).json()
-    if data["actual_time"] == None:
-        continue
-    fma_samples.append(
-        max(data["alliances"]["blue"]["score"], data["alliances"]["red"]["score"])
-    )
-    print(f"Fma {len(fma_samples)}")
+    while len(fma_samples) < n:
+        chosen_match = random.choice(all_matches_fma)
+        data = requests.get(
+            f"https://www.thebluealliance.com/api/v3/match/{chosen_match}/simple",
+            headers={"X-TBA-Auth-Key": key},
+        ).json()
+        if data["actual_time"] == None:
+            continue
+        fma_samples.append(
+            max(data["alliances"]["blue"]["score"], data["alliances"]["red"]["score"])
+        )
+        print(f"Fma {len(fma_samples)}")
 
-print("\tFMA\tCAL")
-for a in enumerate(zip(fma_samples, california_samples)):
-    print(f"{a[0]+1}.\t{a[1][0]}\t{a[1][1]}")
+    dataframe = pd.DataFrame({"FMA": fma_samples, "CAL": california_samples})
 
-print("\n")
-print("\tstd\tmean\tn")
-print(
-    f"FMA\t{numpy.std(fma_samples,ddof=1)}\t{numpy.mean(fma_samples)}\t{len(fma_samples)}"
-)
-print(
-    f"CAL\t{numpy.std(california_samples,ddof=1)}\t{numpy.mean(california_samples)}\t{len(california_samples)}"
-)
+    dataframe.to_csv(data_csv, index=False)
+
+dataframe = pd.read_csv(data_csv)
+
+print(dataframe.describe())
+
+fma_samples = dataframe["FMA"]
+california_samples = dataframe["CAL"]
+
+# Graph both samples on boxplots
+figure, axes = plt.subplots()
+plt.xlabel("Winning Match Score (points)")
+axes.boxplot([california_samples, fma_samples], 0, "rs", 0)
+axes.set_yticklabels(["CAL", "FMA"])
+figure.savefig("fma-cal-boxplot.png")
+axes.clear()
