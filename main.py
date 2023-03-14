@@ -54,7 +54,7 @@ if not pathlib.Path(data_csv).exists():
 
     california_samples = []
 
-    n = 150
+    n = 34
 
     while len(california_samples) < n:
         chosen_match = random.choice(all_matches_cal)
